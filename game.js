@@ -1,43 +1,25 @@
+// canvas.arc(x, y, radius, startAngle, endAngle [, counterclockwise]);
 const canvas = document.getElementById("canvas");
 const context = canvas.getContext("2d");
-
 const width = canvas.getAttribute("width");
 const height = canvas.getAttribute("height");
-
-let game_over = false;
-let first_click = true;
-let click_initial_position_x = 0;
-let click_initial_position_y = 0;
 const size = 9;
 const cell_count = size * size;
 const item_size = width / size;
 const gap_size = Math.trunc(item_size / 7);
 const inner_rect_size = item_size - gap_size * 2;
-
-// canvas.arc(x, y, radius, startAngle, endAngle [, counterclockwise]);
-
+let cell_status = []
+let first_click = true;
+let click_initial_position_x = 0;
+let click_initial_position_y = 0;
+let game_over = false;
 let bomb_count = 10;
-
 let empty_cells_remaining = cell_count - bomb_count;
 
-if (size > 16) {
+if (size >= 16) {
     bomb_count = 40;
 } else if (size > 9) {
     bomb_count = 10;
-}
-
-let cell_status = []
-
-function getRandomArbitrary(min, max) {
-    return Math.trunc(Math.random() * (max - min) + min);
-}
-
-function getMousePosition(event) {
-    const bounding_client_rect = canvas.getBoundingClientRect();
-    const x = event.clientX - bounding_client_rect.left;
-    const y = event.clientY - bounding_client_rect.top;
-    console.log("Coordinate x: " + x, "Coordinate y: " + y);
-    return [x, y];
 }
 
 canvas.addEventListener("mousedown", (e) => {
@@ -51,14 +33,25 @@ canvas.addEventListener("mousedown", (e) => {
 
 canvas.addEventListener("click", (e) => {
     if (game_over || empty_cells_remaining == 0) {
+        if (first_click) {
+            init();
+        }
+        drawField();
+        first_click = true;
+
         return;
     }
     let [x, y] = getMousePosition(e);
     [x, y] = translatePixelToIndex(x, y)
     console.log('click');
     if (x != click_initial_position_x || y != click_initial_position_y) {
-        drawCell(click_initial_position_x, click_initial_position_y);
-        return; 
+        t_cell_status = cell_status[translateCoordinatesToIndex(click_initial_position_x, click_initial_position_y)];
+        if (t_cell_status == 4 || t_cell_status == 0) {
+            drawCell(click_initial_position_x, click_initial_position_y);
+        } else if (t_cell_status == 1 || t_cell_status == 2) {
+            drawFlag(click_initial_position_x, click_initial_position_y);
+        }
+        return;
     }
 
     if (first_click == true) {
@@ -68,6 +61,7 @@ canvas.addEventListener("click", (e) => {
     let t_index = translateCoordinatesToIndex(x, y);
     if (cell_status[t_index] == 0) {
         game_over = true;
+        first_click = true;
         console.log('BOMB!!!!!!!!');
         for (let i = 0; i < size; i++) {
             for (let j = 0; j < size; j++) {
@@ -82,14 +76,20 @@ canvas.addEventListener("click", (e) => {
         drawFlag(x, y);
     } else if (cell_status[t_index] == 4) {
         calculateValueForOpenedCell(x, y);
+        if (empty_cells_remaining == 0) {
+            first_click = true;
+        }
     }
 });
 
 canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    if (game_over || empty_cells_remaining == 0) {
+        return;
+    }
     let [x, y] = getMousePosition(e);
     [x, y] = translatePixelToIndex(x, y)
-    
+
     if (first_click) {
         drawCell(x, y)
         return;
@@ -120,32 +120,24 @@ canvas.addEventListener("contextmenu", (e) => {
     }
 });
 
+function getRandomArbitrary(min, max) {
+    return Math.trunc(Math.random() * (max - min) + min);
+}
+
+function getMousePosition(event) {
+    const bounding_client_rect = canvas.getBoundingClientRect();
+    const x = event.clientX - bounding_client_rect.left;
+    const y = event.clientY - bounding_client_rect.top;
+    console.log("Coordinate x: " + x, "Coordinate y: " + y);
+    return [x, y];
+}
+
 function translateCoordinatesToIndex(x, y) {
     return x + y * size;
 }
 
 function translatePixelToIndex(x, y) {
     return [Math.trunc(x / item_size), Math.trunc(y / item_size)];
-}
-
-function init(x, y) {
-    first_click = false;
-    console.log('init function called');
-    const reserved_cell = translateCoordinatesToIndex(x, y);
-
-    for (let index = 0; index < cell_count; index++) {
-        cell_status.push(4);
-    }
-
-    for (let index = 0; index < bomb_count; index++) {
-        let i = getRandomArbitrary(0, cell_count);
-        if (i == reserved_cell || cell_status[i] == 0) {
-            index--;
-            continue;
-        }
-        cell_status[i] = 0;
-    }
-    console.log(cell_status)
 }
 
 function drawCell(x, y) {
@@ -205,7 +197,7 @@ function countNearBombs(x, y) {
         for (let j = -1; j < 2; j++) {
             const xi = x + i;
             const yj = y + j;
-            if((xi >= 0 && xi < size) && (yj >= 0 && yj < size)) {
+            if ((xi >= 0 && xi < size) && (yj >= 0 && yj < size)) {
                 if (i == 0 && j == 0) {
                     continue;
                 }
@@ -240,7 +232,7 @@ function calculateValueForOpenedCell(x, y) {
             for (let i = -1; i < 2; i++) {
                 const xi = x + i;
                 const yj = y + j;
-                if((xi >= 0 && xi < size) && (yj >= 0 && yj < size)) {
+                if ((xi >= 0 && xi < size) && (yj >= 0 && yj < size)) {
                     if (i == 0 && j == 0) {
                         continue;
                     }
@@ -283,6 +275,33 @@ function drawField() {
             drawCell(x, y);
         }
     }
+}
+
+function init(x, y) {
+
+    cell_status = []
+    click_initial_position_x = 0;
+    click_initial_position_y = 0;
+    game_over = false;
+    empty_cells_remaining = cell_count - bomb_count;
+
+    first_click = false;
+    console.log('init function called');
+    const reserved_cell = translateCoordinatesToIndex(x, y);
+
+    for (let index = 0; index < cell_count; index++) {
+        cell_status.push(4);
+    }
+
+    for (let index = 0; index < bomb_count; index++) {
+        let i = getRandomArbitrary(0, cell_count);
+        if (i == reserved_cell || cell_status[i] == 0) {
+            index--;
+            continue;
+        }
+        cell_status[i] = 0;
+    }
+    console.log(cell_status)
 }
 
 function game() {
