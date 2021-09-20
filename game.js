@@ -3,12 +3,13 @@ const canvas = document.getElementById("canvas");
 const context = canvas.getContext("2d");
 const width = canvas.getAttribute("width");
 const height = canvas.getAttribute("height");
-const size = 9;
+const size = 20;
 const cell_count = size * size;
 const item_size = width / size;
 const gap_size = Math.trunc(item_size / 7);
 const inner_rect_size = item_size - gap_size * 2;
-let cell_status = []
+const clue_colors = [];
+let cell_status = [];
 let first_click = true;
 let click_initial_position_x = 0;
 let click_initial_position_y = 0;
@@ -90,6 +91,16 @@ canvas.addEventListener("contextmenu", (e) => {
     let [x, y] = getMousePosition(e);
     [x, y] = translatePixelToIndex(x, y)
 
+    if (x != click_initial_position_x || y != click_initial_position_y) {
+        t_cell_status = cell_status[translateCoordinatesToIndex(click_initial_position_x, click_initial_position_y)];
+        if (t_cell_status == 4 || t_cell_status == 0) {
+            drawCell(click_initial_position_x, click_initial_position_y);
+        } else if (t_cell_status == 1 || t_cell_status == 2) {
+            drawFlag(click_initial_position_x, click_initial_position_y);
+        }
+        return;
+    }
+
     if (first_click) {
         drawCell(x, y)
         return;
@@ -99,7 +110,7 @@ canvas.addEventListener("contextmenu", (e) => {
     const cell_value = cell_status[i];
 
     if (cell_value == 3) {
-        drawCell(x, y);
+        calculateValueForOpenedCell(x, y);
         return;
     }
 
@@ -119,6 +130,10 @@ canvas.addEventListener("contextmenu", (e) => {
         }
     }
 });
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function getRandomArbitrary(min, max) {
     return Math.trunc(Math.random() * (max - min) + min);
@@ -148,7 +163,7 @@ function drawCell(x, y) {
         item_size * y + item_size
     ];
 
-    context.fillStyle = "#004EC0";
+    context.fillStyle = "#065A82";
     fillTriangle(
         indices[0], indices[1],
         indices[2], indices[1],
@@ -212,7 +227,7 @@ function countNearBombs(x, y) {
     return near_bombs_count;
 }
 
-function calculateValueForOpenedCell(x, y) {
+async function calculateValueForOpenedCell(x, y) {
     cell_status[translateCoordinatesToIndex(x, y)] = 3;
     empty_cells_remaining--;
 
@@ -227,6 +242,7 @@ function calculateValueForOpenedCell(x, y) {
             x * item_size + item_size * 0.3,
             y * item_size + item_size * 0.7
         );
+        await sleep(25);
     } else {
         for (let j = -1; j < 2; j++) {
             for (let i = -1; i < 2; i++) {
@@ -236,10 +252,10 @@ function calculateValueForOpenedCell(x, y) {
                     if (i == 0 && j == 0) {
                         continue;
                     }
-                    // drawCellMouseDown(xi, yj, "#00FF00");
                     const ii = translateCoordinatesToIndex(xi, yj);
                     if (cell_status[ii] == 2 || cell_status[ii] == 4) {
                         calculateValueForOpenedCell(xi, yj);
+                        await sleep(25);
                     }
                 }
             }
