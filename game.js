@@ -3,93 +3,85 @@ const canvas = document.getElementById("canvas");
 const context = canvas.getContext("2d");
 const width = canvas.getAttribute("width");
 const height = canvas.getAttribute("height");
-const size = 20;
+const size = 9;
 const cell_count = size * size;
 const item_size = width / size;
-const gap_size = Math.trunc(item_size / 7);
+const gap_size = item_size / 7;
 const inner_rect_size = item_size - gap_size * 2;
 const clue_colors = [];
 let cells_status = [];
-let new_game = true;
-let click_initial_position_x = 0;
-let click_initial_position_y = 0;
+let first_cell = true;
+let mousedown_x = 0;
+let mousedown_y = 0;
 let game_over = false;
 let bomb_count = 10;
 let empty_cells_remaining = cell_count - bomb_count;
 
-const BOMB = 0;
+const BOMB          = 0;
 const BOMB_AND_FLAG = 1;
-const FLAG = 2;
-const OPENED = 3;
-const NO_BOMB = 4;
-
-
-
-if (size >= 16) {
-    bomb_count = 40;
-} else if (size > 9) {
-    bomb_count = 10;
-}
+const FLAG          = 2;
+const OPENED        = 3;
+const NO_BOMB       = 4;
 
 canvas.addEventListener("mousedown", (e) => {
     const [x, y] = getMousePosition(e);
-    [click_initial_position_x, click_initial_position_y] = translatePixelToIndex(x, y);
-    if (game_over || cells_status[translateCoordinatesToIndex(click_initial_position_x, click_initial_position_y)] == 3 || empty_cells_remaining == 0) {
+    [mousedown_x, mousedown_y] = translatePixelToIndex(x, y);
+    if (cells_status[getArrayIndexOfXY(mousedown_x, mousedown_y)] == OPENED ||
+        game_over ||
+        empty_cells_remaining == 0) {
         return;
     }
-    drawCellMouseDown(click_initial_position_x, click_initial_position_y);
+    drawCellMouseDown(mousedown_x, mousedown_y);
 });
 
-canvas.addEventListener("click", (e) => {
-    let [x, y] = getMousePosition(e);
-    [x, y] = translatePixelToIndex(x, y)
-
-    if (x != click_initial_position_x || y != click_initial_position_y) {
-        cell_status = cells_status[translateCoordinatesToIndex(click_initial_position_x, click_initial_position_y)];
-        
-        if (cell_status == NO_BOMB || cell_status == BOMB) {
-            drawCell(click_initial_position_x, click_initial_position_y);
-        } else if (cell_status == 1 || cell_status == 2) {
-            drawFlag(click_initial_position_x, click_initial_position_y);
-        }
-        return;
-    }
-
-
+canvas.addEventListener("click", async (e) => {
     if (game_over || empty_cells_remaining == 0) {
         drawField();
-        if (new_game) {
-            init();
-        }
-        new_game = true;
+        game_over = false;
+        empty_cells_remaining = -1;
+        first_cell = true;
+        cells_status = []
         return;
     }
 
-    if (new_game) {
-        init(x, y);
+    [click_x, click_y] = translatePixelToIndex(...getMousePosition(e));
+
+    if (clickCancelled(click_x, click_y)) {
+        return;
     }
 
-    let t_index = translateCoordinatesToIndex(x, y);
-    if (cells_status[t_index] == BOMB) {
-        game_over = true;
-        new_game = true;
-        for (let i = 0; i < size; i++) {
-            for (let j = 0; j < size; j++) {
-                if (cells_status[translateCoordinatesToIndex(i, j)] == BOMB) {
-                    drawBomb(i, j);
+    if (first_cell) {
+        init(click_x, click_y);
+    }
+
+    let cell_status = cells_status[getArrayIndexOfXY(click_x, click_y)];
+    switch (cell_status) {
+        case BOMB:
+            game_over = true;
+            first_cell = true;
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    if (cells_status[getArrayIndexOfXY(i, j)] == BOMB) {
+                        drawBomb(i, j);
+                        await sleep(2);
+                    }
                 }
             }
-        }
-        drawBomb(x, y, " #FF0000");
-        drawGameOverScreen(win = false);
-    } else if (cells_status[t_index] == 1 || cells_status[t_index] == 2) {
-        drawFlag(x, y);
-    } else if (cells_status[t_index] == 4) {
-        calculateValueForOpenedCell(x, y);
-    }
+            drawBomb(click_x, click_y, "#FF0000");
+            drawGameOverScreen(win = false);
+            break;
 
-    if (empty_cells_remaining == 0) {
-        drawGameOverScreen(win = true);
+        case FLAG:
+        case BOMB_AND_FLAG:
+            drawFlag(click_x, click_y);
+            break;
+
+        case NO_BOMB:
+            calculateValueForOpenedCell(click_x, click_y);
+            if (empty_cells_remaining == 0) {
+                drawGameOverScreen(win = true);
+            }
+            break;
     }
 });
 
@@ -98,48 +90,56 @@ canvas.addEventListener("contextmenu", (e) => {
     if (game_over || empty_cells_remaining == 0) {
         return;
     }
-    let [x, y] = getMousePosition(e);
-    [x, y] = translatePixelToIndex(x, y)
+    [click_x, click_y] = translatePixelToIndex(...getMousePosition(e));
 
-    if (x != click_initial_position_x || y != click_initial_position_y) {
-        t_cell_status = cells_status[translateCoordinatesToIndex(click_initial_position_x, click_initial_position_y)];
-        if (t_cell_status == NO_BOMB || t_cell_status == BOMB) {
-            drawCell(click_initial_position_x, click_initial_position_y);
-        } else if (t_cell_status == BOMB_AND_FLAG || t_cell_status == FLAG) {
-            drawFlag(click_initial_position_x, click_initial_position_y);
-        }
+    if (clickCancelled(click_x, click_y))
         return;
-    }
 
-    if (new_game) {
-        drawCell(x, y)
+    if (first_cell) {
+        drawCell(click_x, click_y)
         return;
     };
 
-    const i = translateCoordinatesToIndex(x, y)
+    const i = getArrayIndexOfXY(click_x, click_y)
     const cell_value = cells_status[i];
 
-    if (cell_value == 3) {
-        calculateValueForOpenedCell(x, y);
-        return;
-    }
-
-    if (cell_value == BOMB_AND_FLAG || cell_value == FLAG) {
-        drawCell(x, y);
+    if (cell_value == OPENED) {
+    } else if (cell_value == BOMB_AND_FLAG || cell_value == FLAG) {
+        drawCell(click_x, click_y);
         if (cell_value == BOMB_AND_FLAG) {
             cells_status[i] = BOMB;
         } else if (cell_value == FLAG) {
-            cells_status[i] = 4;
+            cells_status[i] = NO_BOMB;
         }
     } else {
-        drawFlag(x, y);
+        drawFlag(click_x, click_y);
         if (cell_value == BOMB) {
-            cells_status[i] = 1;
+            cells_status[i] = BOMB_AND_FLAG;
         } else if (cell_value == NO_BOMB) {
             cells_status[i] = FLAG;
         }
     }
 });
+
+function clickCancelled(x, y) {
+    if (x != mousedown_x || y != mousedown_y) {
+        const cell_status = cells_status[getArrayIndexOfXY(mousedown_x, mousedown_y)];
+
+        switch (cell_status) {
+            case NO_BOMB:
+            case BOMB:
+            case undefined:
+            drawCell(mousedown_x, mousedown_y);
+            break;
+            case BOMB_AND_FLAG:
+            case FLAG:
+            drawFlag(mousedown_x, mousedown_y);
+            break;
+        }
+        return true;
+    }
+    return false;
+}
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -157,7 +157,7 @@ function getMousePosition(event) {
     return [x, y];
 }
 
-function translateCoordinatesToIndex(x, y) {
+function getArrayIndexOfXY(x, y) {
     return x + y * size;
 }
 
@@ -226,7 +226,7 @@ function countNearBombs(x, y) {
                 if (i == 0 && j == 0) {
                     continue;
                 }
-                const ii = translateCoordinatesToIndex(xi, yj);
+                const ii = getArrayIndexOfXY(xi, yj);
                 if (cells_status[ii] == BOMB || cells_status[ii] == BOMB_AND_FLAG) {
                     near_bombs_count++;
                 }
@@ -238,7 +238,7 @@ function countNearBombs(x, y) {
 }
 
 async function calculateValueForOpenedCell(x, y) {
-    cells_status[translateCoordinatesToIndex(x, y)] = 3;
+    cells_status[getArrayIndexOfXY(x, y)] = OPENED;
     empty_cells_remaining--;
 
     let near_bombs_count = countNearBombs(x, y);
@@ -262,7 +262,7 @@ async function calculateValueForOpenedCell(x, y) {
                     if (i == 0 && j == 0) {
                         continue;
                     }
-                    const ii = translateCoordinatesToIndex(xi, yj);
+                    const ii = getArrayIndexOfXY(xi, yj);
                     if (cells_status[ii] == FLAG || cells_status[ii] == NO_BOMB) {
                         calculateValueForOpenedCell(xi, yj);
                         await sleep(25);
@@ -295,7 +295,7 @@ function fillTriangle(x1, y1, x2, y2, x3, y3) {
 function drawGameOverScreen(win) {
     color = win ? "green" : "red";
     context.fillStyle = color;
-    const w = item_size / 4;
+    const w = gap_size;
     context.fillRect(0, 0, width, w);
     context.fillRect(0, height - w, width, w);
     context.fillRect(0, 0, w, height);
@@ -303,7 +303,7 @@ function drawGameOverScreen(win) {
 }
 
 function drawField() {
-    context.fillStyle = "#08090A";
+    context.fillStyle = "red";
     context.fillRect(0, 0, 400, 400);
 
     for (let x = 0; x < size; x++) {
@@ -316,17 +316,15 @@ function drawField() {
 function init(x, y) {
 
     cells_status = []
-    click_initial_position_x = 0;
-    click_initial_position_y = 0;
-    game_over = false;
+    mousedown_x = 0;
+    mousedown_y = 0;
     empty_cells_remaining = cell_count - bomb_count;
-
-    new_game = false;
-    console.log('init function called');
-    const reserved_cell = translateCoordinatesToIndex(x, y);
+    first_cell = false;
+    
+    const reserved_cell = getArrayIndexOfXY(x, y);
 
     for (let index = 0; index < cell_count; index++) {
-        cells_status.push(4);
+        cells_status.push(NO_BOMB);
     }
 
     for (let index = 0; index < bomb_count; index++) {
@@ -337,7 +335,6 @@ function init(x, y) {
         }
         cells_status[i] = BOMB;
     }
-    console.log(cells_status)
 }
 
 function game() {
